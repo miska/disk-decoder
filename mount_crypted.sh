@@ -91,6 +91,7 @@ echo "$CFG" | while read cr_conf; do
 		done
 		for service in `get_services "$cr_conf"`; do
 			[ \! -x "/etc/init.d/$service" ] || "/etc/init.d/$service" restart
+			[ \! -x "/usr/bin/systemctl" ] || systemctl restart "$service"
 		done
 	fi
 done
