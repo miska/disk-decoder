@@ -1,0 +1,126 @@
+Disk Decoder
+============
+
+Problem
+-------
+
+You have a NAS running at your home. Obviously, you have your drives encrypted
+and you are running Linux, right? So where is the problem? Machines sometimes
+reboot, either because of update or because of power failure. But you don't
+want to ssh to your NAS and unlock drive everytime you want to use it. You are
+lazy and you are willing to loosen the security a little bit for a big
+convenience gain. That is what Disk Decoder does.
+
+It is a script that tries to figure out the password by sshing to various
+computers on your network. So if everything is ok and you are home, your drives
+will unlock automatically. If somebody steals your drives, he can't unlock them
+till he also steals your whole infrastructure and your running device with
+keys. This device can be laptop, desktop or even cell phone.
+
+Setup
+-----
+
+It sounds like a good idea, so let's setup everything. To make everything work,
+devices that will be used to unlock the drives will need to have either static
+IP addresses or resolvable names and have to be running ssh server with
+specific setup.
+
+Preparing drives
+~~~~~~~~~~~~~~~~
+
+Before using the script, you have to prepare drives manually. Script is using
+Btrfs (why would you want any other filesystem anyway?) and supports several
+subvolumes and actualy requires at least one.
+
+To prepare you drive `/dev/sdx1` for use, run the following commands.
+
+---------------------------------------------------------------------------------
+cryptsetup luksFormat /dev/sdx1
+cryptsetup luksOpen /dev/sdx1 my_encrypted_storage
+mkfs.btrfs -L storage /dev/mapper/my_encrypted_storage
+mkdir -p /mnt/tmp
+mount /dev/mapper/my_encrypted_storage /mnt/tmp
+btrfs subvol create /mnt/tmp/@
+umount /mnt/tmp
+cryptsetup luksClose my_encrypted_storage
+---------------------------------------------------------------------------------
+
+The all you need to do is install the script and configure both you NAS and
+your key devices.
+
+Your NAS device
+~~~~~~~~~~~~~~~
+
+On your nas device, you need to download script `mount_crypted`, store it
+somewhere and make it executable.
+
+---------------------------------------------------------------------------------
+wget -O /usr/local/sbin/mount_crypted \
+	https://raw.githubusercontent.com/miska/disk-decoder/master/mount_crypted.sh
+chmod 0755 /usr/local/sbin/mount_crypted
+---------------------------------------------------------------------------------
+
+Next step is to put it in cron to be executed every now an then. For example
+every five minutes.
+
+---------------------------------------------------------------------------------
+echo '*/5 * * * * root /usr/local/sbin/mount_crypted' > /etc/cron.d/mount_crypted
+---------------------------------------------------------------------------------
+
+Configuration file
+^^^^^^^^^^^^^^^^^^
+
+Last step is configuration. You need to specify which partitions do you want to
+unlock, where to mount them, what subvolumes you want, what services you want
+to restart after drives are mounted (for example samba, mpd, ...) and most
+importantly, where to get the keys.
+
+Configuration should be in `/etc/ssh_crypt` and could look like this:
+
+---------------------------------------------------------------------------------
+# Where to try to connect
+:user1@192.168.1.10 user2@android.local:8022
+
+# UUID:name:service1,service2,service3[:options[:subvol1,subvol2,subvol3]]
+12345679-abcd-abcd-abcd-1234567890ab:secret_store:samba,mpd:compress=lzo:@,tmp
+---------------------------------------------------------------------------------
+
+Lines starting with colon like `:user1@192.168.1.10 user2@android.local:8022`
+specify where the script should try to connect to get a key. You can have
+multiple lines or space separated list. Format of every item is
+`username@host:port`.
+
+For every disk that needs to be mounted, you need another line in the
+configuration file. Forrmat is comma delimited table of the following fields:
+
+* UUID of the encrypted partition
+* name used by device mapper, has to be unique and shouldn't contain spaces or
+  any special characters
+* list of service to restart on successfull mount
+* additional mount options, like `compress` or `commit`
+* list of subvolumes to mount - each of them is mounted into subdirectory of
+  the root mounting point. Leading `@` is stripped and the default value is
+  `@`, so this script expects at least one subvolume - `@`
+
+Your "key" devices
+~~~~~~~~~~~~~~~~~~
+
+On your key devices, you need to be running ssh server. Simplest setup is to
+have a file with passwords that you will be serving over ssh. The format is
+_UUID_ of the encrypted partition, then colon (`:`) and then password.
+
+---------------------------------------------------------------------------------
+12345679-abcd-abcd-abcd-1234567890ab:Quadfi5QuerbEbreymWekvonOtbyoneo
+23456791-abcd-abcd-abcd-1234567890ac:reewittAfBoiBicDysabyaHicceicyev
+34567912-abcd-abcd-abcd-1234567890ad:CiagmagdiOsBocyerph7obagdadAvbow
+---------------------------------------------------------------------------------
+
+In your `.ssh/authorized_keys` you then enter the ssh key you have on the NAS
+device and force a specific command to be run for this specific key.
+
+---------------------------------------------------------------------------------
+command="cat ~/.disk_passwords",no-port-forwarding,no-x11-forwarding,no-agent-forwarding ssh-ed25519 AAAAC3abcd12345678901234567890abcd/Iamasshkey/trustme0IknowWhatIamTH root@nas
+---------------------------------------------------------------------------------
+
+When you ssh as this user using specified ssh key, all you get is content of
+`~/.disk_passwords`. You can't do anything else, unless you use different key.
