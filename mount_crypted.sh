@@ -84,7 +84,7 @@ echo "$CFG" | while read cr_conf; do
 			fi
 		done
 	fi
-	if [ -b "/dev/mapper/cr_$name" ] && [ "`stat -c %m /mnt/store/`" = / ]; then
+	if [ -b "/dev/mapper/cr_$name" ] && [ "`stat -c %m /mnt/$name`" = / ]; then
 		mkdir -p /mnt/$name
 		for subvol in `get_subvols "$cr_conf"`; do
 			mount -o "`get_options "$cr_conf"`subvol=$subvol" -t btrfs "/dev/mapper/cr_$name" "/mnt/$name/`echo "$subvol" | sed 's|^@||'`"
