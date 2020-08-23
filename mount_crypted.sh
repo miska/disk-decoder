@@ -67,27 +67,35 @@ get_services() {
 	echo "$1" | cut -f 3 -d : | sed 's|,| |g'
 }
 
-
-echo "$CFG" | while read cr_conf; do
+parse_config() {
 	name="`get_name "$cr_conf"`"
 	uuid="`get_uuid "$cr_conf"`"
 	dev="`get_dev "$uuid"`"
-	if [ -n "$dev" ] && [ -b "$dev" ] && [ \! -b "/dev/mapper/cr_$name" ]; then
+	cr_dev="cr_${name}_`basename $dev`"
+}
+
+echo "$CFG" | while read cr_conf; do
+	parse_config
+	if [ -n "$dev" ] && [ -b "$dev" ] && [ \! -b "/dev/mapper/$cr_dev" ]; then
 		for dst in $DST; do
 			port="`get_port "$dst"`"
 			if nmap -p "$port" "`get_ip "$dst"`" 2>&1 | grep -q '/tcp.*open'; then
 				key="`ssh -p "$port" "$(get_target "$dst")" | sed -n "s|^$uuid:||p"`"
 				if [ -n "$key" ]; then
-					echo -n "$key" | cryptsetup -q luksOpen --key-file - "$dev" "cr_$name"
+					echo -n "$key" | cryptsetup -q luksOpen --key-file - "$dev" "$cr_dev"
 					[ $? -ne 0 ] || break
 				fi
 			fi
 		done
 	fi
-	if [ -b "/dev/mapper/cr_$name" ] && [ "`stat -c %m /mnt/$name`" = / ]; then
+done
+btrfs device scan --all-devices
+echo "$CFG" | while read cr_conf; do
+	parse_config
+	if [ -b "/dev/mapper/$cr_dev" ] && [ "`stat -c %m /mnt/$name`" = / ]; then
 		mkdir -p /mnt/$name
 		for subvol in `get_subvols "$cr_conf"`; do
-			mount -o "`get_options "$cr_conf"`subvol=$subvol" -t btrfs "/dev/mapper/cr_$name" "/mnt/$name/`echo "$subvol" | sed 's|^@||'`"
+			mount -o "`get_options "$cr_conf"`subvol=$subvol" -t btrfs "/dev/mapper/$cr_dev" "/mnt/$name/`echo "$subvol" | sed 's|^@||'`"
 		done
 		for service in `get_services "$cr_conf"`; do
 			[ \! -x "/etc/init.d/$service" ] || "/etc/init.d/$service" restart
