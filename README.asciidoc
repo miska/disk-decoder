@@ -124,3 +124,23 @@ command="cat ~/.disk_passwords",no-port-forwarding,no-x11-forwarding,no-agent-fo
 
 When you ssh as this user using specified ssh key, all you get is content of
 `~/.disk_passwords`. You can't do anything else, unless you use different key.
+
+Notes
+-----
+
+Btrfs raid remarks
+~~~~~~~~~~~~~~~~~~
+
+To make it possible to use Btrfs raid on encrypted devices, script works in
+three phases. Firstly it unlock all devices it can. Then it runs btrfs command
+to refresh information about available drives. The last step is mounting and
+restarting services. In case of Btrfs raid, you don't want to specify all mount
+options with every drive in raid, so you can use special option `nomount` to
+ignore the drive in the mounting phase. So your `ssh_crypt` file may look like
+this:
+
+---------------------------------------------------------------------------------
+# UUID:name:service1,service2,service3[:options[:subvol1,subvol2,subvol3]]
+12345679-abcd-abcd-abcd-1234567890ab:secret_store::nomount:
+98765432-abcd-abcd-abcd-1234567890ab:secret_store:samba,mpd:compress=lzo:@,tmp
+---------------------------------------------------------------------------------
