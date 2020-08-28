@@ -92,12 +92,13 @@ echo "$CFG" | while read cr_conf; do
 	fi
 done
 # Scan for btrfs raids
-btrfs device scan --all-devices
+btrfs device scan --all-devices > /dev/null
 echo "$CFG" | while read cr_conf; do
 	parse_config
 	if [ -b "/dev/mapper/$cr_dev" ] && [ "`stat -c %m /mnt/$name`" = / ] && [ "$options" \!= "nomount," ]; then
 		mkdir -p /mnt/$name
 		for subvol in `get_subvols "$cr_conf"`; do
+			mkdir -p "/mnt/$name/`echo "$subvol" | sed 's|^@||'`"
 			mount -o "`get_options "$cr_conf"`subvol=$subvol" -t btrfs "/dev/mapper/$cr_dev" "/mnt/$name/`echo "$subvol" | sed 's|^@||'`"
 		done
 		for service in `get_services "$cr_conf"`; do
