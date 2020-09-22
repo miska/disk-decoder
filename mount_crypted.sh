@@ -26,15 +26,15 @@ DRIVES="`blkid | grep 'TYPE="crypto_LUKS"'`"
 CFG="`cat /etc/ssh_crypt | grep -v '^[#:]'`"
 
 get_ip() {
-	echo "$1" | sed 's|^[^@]*@||' | sed 's|:[^:\]]*$||'
+	echo "$1" | sed 's|^[^@]*@||' | sed 's|:[0-9]*$||'
 }
 
 get_target() {
-	echo "$1" | sed 's|\(.*\):[^:\]]*$|\1|'
+	echo "$1" | sed 's|\(.*\):[0-9]*$|\1|'
 }
 
 get_port() {
-	res="`echo "$1" | sed -n 's|.*:\([^:\]]*\)$|\1|p'`"
+	res="`echo "$1" | sed -n 's|.*:\([0-9]*\)$|\1|p'`"
 	[ "$res" ] || res=22
 	echo "$res"
 }
