@@ -26,11 +26,36 @@ depends() {
 install() {
     # nmap is optional at build time; the script handles its absence at boot.
     inst_multiple -o ssh cryptsetup btrfs blkid nmap
-    inst_multiple -o /etc/ssh/ssh_config
+    inst_multiple -o /etc/ssh/ssh_config /etc/ssh/ssh_known_hosts
 
     if [ -f "$dracutsysrootdir/etc/ssh_crypt" ]; then
         inst_simple "$dracutsysrootdir/etc/ssh_crypt" /etc/ssh_crypt
     fi
+
+    # Root SSH config and keys for unattended key retrieval in initramfs.
+    # Only unencrypted private keys are installed; passphrase-protected keys
+    # cannot be used during early boot.
+    if [ -f "$dracutsysrootdir/root/.ssh/config" ]; then
+        inst_simple "$dracutsysrootdir/root/.ssh/config" /root/.ssh/config
+    fi
+    inst_multiple -o /root/.ssh/known_hosts
+
+    local key pub
+    for key in "$dracutsysrootdir"/root/.ssh/id_* "$dracutsysrootdir"/root/.ssh/*_id_*; do
+        [ -f "$key" ] || continue
+        case "$key" in
+            *.pub|*.ppk) continue ;;
+        esac
+        if command -v ssh-keygen > /dev/null 2>&1; then
+            ssh-keygen -y -P '' -f "$key" > /dev/null 2>&1 || continue
+        else
+            # Cannot verify passphrase status; skip to avoid protected keys.
+            continue
+        fi
+        inst_simple "$key" "${key#$dracutsysrootdir}"
+        pub="$key.pub"
+        [ -f "$pub" ] && inst_simple "$pub" "${pub#$dracutsysrootdir}"
+    done
 
     inst_simple "$moddir/mount_crypted.service" "$systemdsystemunitdir/mount_crypted.service"
 

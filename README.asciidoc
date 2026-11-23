@@ -181,9 +181,12 @@ dracut
 
 `make install-dracut` installs module `90mount_crypted`.  It pulls in the
 `systemd`, `crypt`, `btrfs` and `network` dracut modules, copies the script
-and `/etc/ssh_crypt` into the initramfs and enables the unit there.  `nmap`
-is included too when present at build time; if it is unavailable, the script
-simply skips the port probe.
+and `/etc/ssh_crypt` into the initramfs and enables the unit there.  Root's
+SSH config, `known_hosts`, and unencrypted private keys/public keys from
+`/root/.ssh` are also included for unattended key retrieval.  Passphrase-
+protected private keys are skipped because they cannot be used during early
+boot.  `nmap` is included too when present at build time; if it is
+unavailable, the script simply skips the port probe.
 
 The module is opt-in.  It is included when any of these is true:
 

@@ -175,8 +175,11 @@ and
 .BR After= .
 The dracut module
 .B 90mount_crypted
-adds the script, the configuration file and the unit to the initramfs.  It is
-included when
+adds the script, the configuration file and the unit to the initramfs.  It
+also includes root's SSH config, known hosts and unencrypted private keys from
+.I /root/.ssh
+for unattended early-boot key retrieval; passphrase-protected keys are
+skipped.  It is included when
 .B rd.mount_crypted
 is on the kernel command line, when
 .I /etc/ssh_crypt
