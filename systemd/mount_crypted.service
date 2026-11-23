@@ -1,0 +1,15 @@
+[Unit]
+Description=Unlock encrypted drives and mount btrfs subvolumes
+DefaultDependencies=no
+Wants=network-online.target
+After=network-online.target systemd-udev-settle.service cryptsetup-pre.target
+Before=cryptsetup.target local-fs-pre.target
+ConditionPathExists=/etc/ssh_crypt
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=@SBINDIR@/mount_crypted
+
+[Install]
+WantedBy=local-fs-pre.target

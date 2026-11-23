@@ -51,8 +51,22 @@ your key devices.
 Your NAS device
 ~~~~~~~~~~~~~~~
 
-On your nas device, you need to download script `mount_crypted`, store it
-somewhere and make it executable.
+On your NAS device, install the script and man page:
+
+---------------------------------------------------------------------------------
+make
+make install
+---------------------------------------------------------------------------------
+
+This installs `mount_crypted` into `/usr/local/sbin`, the man page into
+`/usr/local/share/man/man8`, `mount_crypted.service` into
+`/usr/local/lib/systemd/system` and the dracut module into
+`/usr/lib/dracut/modules.d/90mount_crypted`.  Partial installs are available
+as `make install-base`, `make install-systemd` and `make install-dracut`.
+Override `PREFIX`, `SBINDIR`, `MANDIR`, `SYSTEMD_UNIT_DIR`, `DRACUT_MODDIR`
+or `DESTDIR` as needed.
+
+You can still install just the script manually:
 
 ---------------------------------------------------------------------------------
 wget -O /usr/local/sbin/mount_crypted \
@@ -60,8 +74,8 @@ wget -O /usr/local/sbin/mount_crypted \
 chmod 0755 /usr/local/sbin/mount_crypted
 ---------------------------------------------------------------------------------
 
-Next step is to put it in cron to be executed every now an then. For example
-every five minutes.
+Next step is to run it periodically or from systemd.  For a cron-based setup,
+for example every five minutes:
 
 ---------------------------------------------------------------------------------
 echo '*/5 * * * * root /usr/local/sbin/mount_crypted' > /etc/cron.d/mount_crypted
@@ -127,6 +141,61 @@ When you ssh as this user using specified ssh key, all you get is content of
 
 Notes
 -----
+
+Environment variables
+~~~~~~~~~~~~~~~~~~~~~
+
+The script defaults can be overridden with environment variables:
+`CONFIG` (default `/etc/ssh_crypt`), `MAPPER_DIR` (`/dev/mapper`),
+`MAPPER_PREFIX` (`cr_`), `MOUNT_DIR` (`/mnt`) and `DEFAULT_PORT` (`22`).
+The `KEY` environment variable can also provide a key directly, and `DST`
+or the first command line argument can replace the configured destinations.
+
+systemd
+~~~~~~~
+
+`mount_crypted.service` is a `Type=oneshot` unit with
+`DefaultDependencies=no`.  It runs after the network is online and before
+`local-fs-pre.target`, so the encrypted devices are available before other
+local filesystems are mounted.  Enable it with:
+
+---------------------------------------------------------------------------------
+systemctl enable mount_crypted.service
+---------------------------------------------------------------------------------
+
+To pull it in from a particular mount instead of enabling it globally, add a
+drop-in to that mount unit:
+
+---------------------------------------------------------------------------------
+# /etc/systemd/system/mnt-data.mount.d/10-mount_crypted.conf
+[Unit]
+Requires=mount_crypted.service
+After=mount_crypted.service
+---------------------------------------------------------------------------------
+
+If systemd should own the mounts, set `nomount` in the corresponding config
+entries so the script only unlocks the devices.
+
+dracut
+~~~~~~
+
+`make install-dracut` installs module `90mount_crypted`.  It pulls in the
+`systemd`, `crypt`, `btrfs` and `network` dracut modules, copies the script
+and `/etc/ssh_crypt` into the initramfs and enables the unit there.  `nmap`
+is included too when present at build time; if it is unavailable, the script
+simply skips the port probe.
+
+The module is opt-in.  It is included when any of these is true:
+
+* `rd.mount_crypted` (or `=1`, `=yes`, `=on`) is on the kernel command line,
+* `/etc/ssh_crypt` exists on the host,
+* the module is explicitly added with `dracut --add mount_crypted`.
+
+Early-boot key retrieval needs networking, for example:
+
+---------------------------------------------------------------------------------
+rd.mount_crypted=1 rd.neednet=1 ip=dhcp
+---------------------------------------------------------------------------------
 
 Btrfs raid remarks
 ~~~~~~~~~~~~~~~~~~

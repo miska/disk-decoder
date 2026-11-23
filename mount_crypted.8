@@ -1,0 +1,204 @@
+.TH MOUNT_CRYPTED 8 "November 2026" "mount_crypted" "System Manager's Manual"
+.SH NAME
+mount_crypted \- unlock LUKS devices and mount their btrfs subvolumes using remote keys
+.SH SYNOPSIS
+.B mount_crypted
+.RI [ destination ]
+.SH DESCRIPTION
+.B mount_crypted
+reads a list of encrypted devices from the configuration file, finds their
+LUKS UUIDs on the local block devices and tries to unlock them with keys
+obtained over SSH.  After all devices have been unlocked, btrfs devices are
+rescanned, subvolumes are mounted and the configured services are restarted.
+.PP
+A key server is contacted by running
+.B ssh
+with its standard input connected to
+.BR /dev/null .
+Its output is expected to contain lines of the form
+.IR UUID : key ;
+the line whose UUID matches the device being unlocked is passed to
+.BR cryptsetup (8).
+A destination is written as
+.RI [ user @] host [: port ],
+with
+.B 22
+used when the port is omitted.  The port is probed with
+.BR nmap (1)
+first, unless nmap is not installed.  All destinations from the first command
+line argument and from the configuration file are tried until the device is
+unlocked.
+.PP
+If
+.B KEY
+is set in the environment, it is also passed to
+.B cryptsetup
+for every configured device.
+.SH CONFIGURATION
+The configuration file (default
+.IR /etc/ssh_crypt )
+contains one device per line:
+.PP
+.nf
+UUID:name:service[,service...][:options[:subvol[,subvol...]]]
+.fi
+.PP
+Lines starting with
+.B #
+are ignored.  Lines starting with
+.B :
+define additional key servers; the leading colon is stripped and the rest of
+the line is split on whitespace into destinations, for example:
+.PP
+.nf
+:keys.example.com backup@example.com:2222
+.fi
+.PP
+Lines are read with
+.B read
+without the
+.B -r
+option: a backslash escapes the following character, and a backslash at the
+end of a line continues the line on the next input line.  Write
+.B \(rs\(rs
+for a literal backslash.  For example, a subvolume list may be split:
+.PP
+.nf
+12345678-1234-1234-1234-123456789abc:storage:smbd:ro:\(rs
+data,home
+.fi
+.PP
+Continuation lines must not start with
+.B #
+or
+.BR : ,
+as such lines are filtered out before they are read, and they must not be
+indented: whitespace on a continuation line is kept as part of the field.
+.PP
+The fields of a device line are:
+.TP
+.B UUID
+LUKS UUID of the device, used to find it with
+.BR blkid (8)
+and to select the key from the SSH output.
+.TP
+.B name
+Name used in the mapper device
+.I MAPPER_PREFIX name _ BASENAME
+and in the mount point
+.IR MOUNT_DIR / name .
+.TP
+.B service
+Comma-separated services to restart after mounting.  Each service is
+restarted through
+.I /etc/init.d/service
+if that file is executable, and through
+.B systemctl
+from
+.B PATH
+if it is available.
+.TP
+.B options
+Extra options for the
+.B mount
+command, prepended to the generated
+.B subvol
+option.  The single value
+.B nomount
+disables mounting of this device.
+.TP
+.B subvol
+Comma-separated btrfs subvolumes to mount under
+.IR MOUNT_DIR / name .
+The default is
+.BR @ .
+The leading
+.B @
+is removed from the corresponding mount point directory.
+.SH ENVIRONMENT
+.TP
+.B DST
+Space-separated destinations to try instead of those in the configuration
+file.  Also taken from the first command line argument.
+.TP
+.B KEY
+Key passed to
+.B cryptsetup
+for each device after the remote lookups.
+.TP
+.B CONFIG
+Configuration file, default
+.IR /etc/ssh_crypt .
+.TP
+.B MAPPER_DIR
+Device mapper directory, default
+.IR /dev/mapper .
+.TP
+.B MAPPER_PREFIX
+Prefix of created mapper device names, default
+.BR cr_ .
+.TP
+.B MOUNT_DIR
+Parent directory of the mount points, default
+.IR /mnt .
+.TP
+.B DEFAULT_PORT
+SSH port used when a destination has no port, default
+.BR 22 .
+.SH FILES
+.TP
+.I /etc/ssh_crypt
+Default configuration file.
+.SH EXAMPLE
+.PP
+.nf
+# /etc/ssh_crypt
+:keys.example.com
+12345678-1234-1234-1234-123456789abc:storage:smbd:ro:data,home
+87654321-4321-4321-4321-876543210fed:backup::nomount
+.fi
+.PP
+Unlock the devices using a key server given on the command line (this
+replaces the destinations from the configuration file):
+.PP
+.nf
+.B mount_crypted keys2.example.com:2222
+.fi
+.SH SYSTEMD AND DRACUT
+The package installs
+.BR mount_crypted.service ,
+a oneshot unit ordered before
+.BR local-fs-pre.target .
+It can be enabled directly or pulled in by a mount unit with
+.B Requires=
+and
+.BR After= .
+The dracut module
+.B 90mount_crypted
+adds the script, the configuration file and the unit to the initramfs.  It is
+included when
+.B rd.mount_crypted
+is on the kernel command line, when
+.I /etc/ssh_crypt
+exists, or when the module is added explicitly with
+.BR "dracut --add mount_crypted" .
+The unit checks for
+.I /etc/ssh_crypt ;
+adjust its condition if
+.B CONFIG
+is overridden.
+.SH SEE ALSO
+.BR cryptsetup (8),
+.BR btrfs (8),
+.BR blkid (8),
+.BR mount (8),
+.BR ssh (1),
+.BR nmap (1),
+.BR systemctl (1),
+.BR dracut (8),
+.BR systemd.unit (5)
+.SH AUTHOR
+Michal Hrusecky
+.SH COPYRIGHT
+Copyright \(co 2020 Michal Hrusecky.  This is free software; see the
+COPYING file for the full license text (GNU GPL version 3 or later).
